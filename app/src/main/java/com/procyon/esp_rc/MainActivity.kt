@@ -8,19 +8,24 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import com.procyon.esp_rc.ui.ConnectionsState
 import com.procyon.esp_rc.ui.JoyStick
 import com.procyon.esp_rc.ui.StatusLine
 import com.procyon.esp_rc.ui.theme.ESPRCExcerciseTheme
+import java.time.format.TextStyle
 
 class MainActivity : ComponentActivity() {
 
@@ -52,7 +57,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
 
         val pos by vm.joyStickPos.collectAsState()
 
-        val (title, connectionState, joystick, readout) = createRefs()
+        val (title, connectionState, joystick, readout, scanButton) = createRefs()
 
         Text(
             "ESP RC fun!",
@@ -79,7 +84,6 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
             xy = {
                 vm.updateJoystickPos(it.first, it.second)
             },
-
             )
         //input read out:
         Text(
@@ -90,6 +94,14 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
                 centerHorizontallyTo(parent)
             },
         )
+
+        Button(modifier = Modifier.constrainAs(scanButton){
+            bottom.linkTo(parent.bottom, margin = 16.dp)
+            end.linkTo(parent.end, margin = 16.dp)
+        },onClick = vm::startScan,
+            enabled = connectionStatus == ConnectionsState.Disconnected || connectionStatus == ConnectionsState.Error) {
+            Text("Scan", style = MaterialTheme.typography.bodyLarge)
+        }
     }
 
 }
@@ -98,6 +110,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
 @Composable
 fun GreetingPreview() {
     ESPRCExcerciseTheme {
-        Content(vm = MockViewModel)
+        val scope = rememberCoroutineScope()
+        Content(vm = MockViewModel(scope))
     }
 }

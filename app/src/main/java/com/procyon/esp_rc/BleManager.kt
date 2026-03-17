@@ -78,7 +78,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     fun sendJoystickData(pos: Pair<Int,Int>){
         val (x: Int, y: Int) = pos
         val service = bluetoothGatt?.getService(SERVICE_UUID)
-        val characteristic = service?.getCharacteristic(CHARACHARISTIC_UUID)
+        val characteristic = service?.getCharacteristic(CHARACTERISTIC_UUID)
 
         if(characteristic != null){
             val payload = byteArrayOf(x.toByte(), y.toByte())
