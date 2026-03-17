@@ -1,0 +1,10 @@
+{
+  "additionalFiles": "",
+  "builtInLibrariesFolders": "/Users/hanandann/Library/Arduino15/libraries",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:nodemcu-32s:UploadSpeed=115200,FlashFreq=80,DebugLevel=none,EraseFlash=none",
+  "hardwareFolders": "/Users/hanandann/Library/Arduino15/packages/esp32/hardware/esp32/3.3.7,/Users/hanandann/Library/Arduino15/packages/esp32/hardware/esp32/3.3.7",
+  "otherLibrariesFolders": "/Users/hanandann/Documents/Arduino/libraries",
+  "sketchLocation": "/private/var/folders/b_/4ll9_x69487_3fb0_tpfm6s40000gn/T/.arduinoIDE-unsaved2026217-95971-12lnbti.wuq7/sketch_mar17a"
+}
