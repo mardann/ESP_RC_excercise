@@ -38,7 +38,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
 }
 
-class MockViewModel(val scope: CoroutineScope) : MainViewModelInter {
+class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
 
     val TAG = this::class.simpleName
 

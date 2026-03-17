@@ -25,12 +25,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.procyon.esp_rc.ui.ConnectionsState
 import com.procyon.esp_rc.ui.JoyStick
@@ -71,16 +73,17 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
 
     var hasBtPermission by remember { mutableStateOf(false) }
 
-    val btPermission = rememberPermissionState(permission = Manifest.permission.BLUETOOTH_SCAN) { gotPermission ->
-        if (gotPermission) {
+    val btPermission = rememberMultiplePermissionsState(permissions = listOf( Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)) { gotPermission ->
+        if (gotPermission.values.all { true }) {
             hasBtPermission = true
         }
     }
 
     LaunchedEffect(Unit) {
-        when(btPermission.status){
-            is PermissionStatus.Granted -> hasBtPermission = true
-            is PermissionStatus.Denied -> btPermission.launchPermissionRequest()
+        if(btPermission.permissions.any{it.status is PermissionStatus.Denied}){
+            btPermission.launchMultiplePermissionRequest()
+        } else {
+            hasBtPermission = true
         }
     }
 
@@ -98,7 +101,10 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
             "ESP RC fun!",
             color = Color.White,
             style = MaterialTheme.typography.displayMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier
+                .background(Color(0xAA013869))
+                .padding(8.dp)
                 .constrainAs(title) {
                     top.linkTo(parent.top)
                     start.linkTo(parent.start)
@@ -111,7 +117,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
         StatusLine(
             state = connectionStatus,
             modifier = Modifier.constrainAs(connectionState) {
-                top.linkTo(title.bottom)
+                top.linkTo(title.bottom, margin = 8.dp)
                 centerHorizontallyTo(parent)
             },
         )

@@ -14,12 +14,35 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import com.procyon.esp_rc.ui.ConnectionsState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
+@OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit) {
 
     private var bluetoothGatt: BluetoothGatt? = null
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+    }
+
+    private val posFlow = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 1)
+
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    init {
+        scope.launch {
+            posFlow
+                .sample(100.milliseconds)
+                .collect{
+                    performWrite(it)
+                }
+        }
     }
 
     fun startScan() {
@@ -76,11 +99,15 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     }
 
     fun sendJoystickData(pos: Pair<Int,Int>){
+        posFlow.tryEmit(pos)
+    }
+
+    private fun performWrite(pos: Pair<Int, Int>) {
         val (x: Int, y: Int) = pos
         val service = bluetoothGatt?.getService(SERVICE_UUID)
         val characteristic = service?.getCharacteristic(CHARACTERISTIC_UUID)
 
-        if(characteristic != null){
+        if (characteristic != null) {
             val payload = byteArrayOf(x.toByte(), y.toByte())
             bluetoothGatt?.writeCharacteristic(
                 characteristic,

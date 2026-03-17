@@ -1,0 +1,19 @@
+# Arduino IDE 1.x / 2.x temporary build folders
+build/
+bin/
+
+# Compiled binaries
+*.bin
+*.elf
+*.hex
+
+# Local configuration and logs
+sketch.json
+*.log
+
+# Libraries (if you manage them locally rather than via IDE)
+# libraries/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
