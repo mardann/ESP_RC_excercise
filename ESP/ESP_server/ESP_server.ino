@@ -109,11 +109,11 @@ void motorControll(int8_t speed){
   if(speed > 5){
     digitalWrite(motorIn1, HIGH);
     digitalWrite(motorIn2, LOW);
-    ledcWrite(motorEna, absSpeed);
+    ledcWrite(motorEna, pwmValue);
   } else if(speed < 5){
     digitalWrite(motorIn1, LOW);
     digitalWrite(motorIn2, HIGH);
-    ledcWrite(motorEna, absSpeed);
+    ledcWrite(motorEna, pwmValue);
   } else {
     digitalWrite(motorIn1, LOW);
     digitalWrite(motorIn2, LOW);
