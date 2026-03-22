@@ -18,11 +18,14 @@ import com.procyon.esp_rc.ui.ConnectionsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit) {
@@ -35,6 +38,8 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     private val posFlow = MutableSharedFlow<Triple<Int, Int, Int>>(extraBufferCapacity = 1)
 
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val timeoutScope = CoroutineScope(Dispatchers.Default)
+    var timeoutJob : Job? = null
 
     init {
         scope.launch {
@@ -56,12 +61,12 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         val setting = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
 
         val scanner = bluetoothAdapter!!.bluetoothLeScanner
-        scanner.startScan(listOf(filter), setting, object : ScanCallback() {
-
+        val scanCallback = object : ScanCallback() {
 
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 scanner.stopScan(this)
                 result?.also {
+                    timeoutJob?.cancel()
                     connect(result.device)
                 }
             }
@@ -69,7 +74,16 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
             override fun onScanFailed(errorCode: Int) {
                 status(ConnectionsState.Error)
             }
-        })
+        }
+
+        timeoutJob = timeoutScope.launch {
+            delay(10.seconds)
+            scanner.stopScan(scanCallback)
+            status(ConnectionsState.Disconnected)
+        }
+
+
+        scanner.startScan(listOf(filter), setting, scanCallback)
     }
 
     fun connect(device: BluetoothDevice) {

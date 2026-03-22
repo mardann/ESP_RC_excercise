@@ -35,12 +35,28 @@ const int pwmResolution = 8;
 
 int targetSpeed = 0;
 
+void stopEverything() {
+  //stop motor:
+  digitalWrite(motorIn1, LOW);
+  digitalWrite(motorIn2, LOW);
+  ledcWrite(motorEna, 0);
+
+  //reset steering servo:
+  steeringServo.write(90);
+
+  //reset params:
+  x = 0;
+  y = 0;
+  x_trim = 0;
+  dataStreamStarted = false;
+
+}
 
 
-class MyCallback : public BLECharacteristicCallbacks {
+class MyCharacteristicCallback : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharactaristic) {
     uint8_t *data = pCharactaristic->getData();
-    if (pCharactaristic->getLength() >= 2) {
+    if (pCharactaristic->getLength() >= 3) {
       if(!dataStreamStarted){
         dataStreamStarted = true;
       };
@@ -59,6 +75,25 @@ class MyCallback : public BLECharacteristicCallbacks {
     }
   }
 };
+
+class MyServerCallback : public BLEServerCallbacks{
+  void onConnect(BLEServer *pServer) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Connected!");
+
+  }
+
+  void onDisconnect(BLEServer *pServer) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Disconnected");
+    stopEverything();
+
+  }
+};
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -134,12 +169,16 @@ void bluetoothInit() {
     CHARACTARISTIC_UUID,
     BLECharacteristic::PROPERTY_WRITE);
 
-  pCharactaristic->setCallbacks(new MyCallback());
+  pServer->setCallbacks(new MyServerCallback());
+
+  pCharactaristic->setCallbacks(new MyCharacteristicCallback());
   pService->start();
 
   pServer->getAdvertising()->addServiceUUID(SERVICE_UUID);
   pServer->getAdvertising()->start();
 }
+
+
 
 void printToScreen() {
   unsigned long now = millis();
@@ -154,4 +193,4 @@ void printToScreen() {
     lcd.print("Y: ");
     lcd.print(y);
   }
-};
+}
