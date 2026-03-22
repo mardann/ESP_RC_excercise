@@ -13,6 +13,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import android.util.Log
 import com.procyon.esp_rc.ui.ConnectionsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,13 +26,13 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit) {
-
+    private val TAG = this::class.simpleName
     private var bluetoothGatt: BluetoothGatt? = null
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     }
 
-    private val posFlow = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 1)
+    private val posFlow = MutableSharedFlow<Triple<Int, Int, Int>>(extraBufferCapacity = 1)
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -39,7 +40,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         scope.launch {
             posFlow
                 .sample(100.milliseconds)
-                .collect{
+                .collect {
                     performWrite(it)
                 }
         }
@@ -98,17 +99,18 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         })
     }
 
-    fun sendJoystickData(pos: Pair<Int,Int>){
+    fun sendJoystickData(pos: Triple<Int, Int, Int>) {
         posFlow.tryEmit(pos)
     }
 
-    private fun performWrite(pos: Pair<Int, Int>) {
-        val (x: Int, y: Int) = pos
+    private fun performWrite(pos: Triple<Int, Int, Int>) {
+        val (x: Int, y: Int, xTrim: Int) = pos
         val service = bluetoothGatt?.getService(SERVICE_UUID)
         val characteristic = service?.getCharacteristic(CHARACTERISTIC_UUID)
 
         if (characteristic != null) {
-            val payload = byteArrayOf(x.toByte(), y.toByte())
+            val payload = byteArrayOf(x.toByte(), y.toByte(), xTrim.toByte())
+            Log.d(TAG, "performWrite: payload = $payload")
             bluetoothGatt?.writeCharacteristic(
                 characteristic,
                 payload,

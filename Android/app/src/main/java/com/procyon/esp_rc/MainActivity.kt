@@ -37,6 +37,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.procyon.esp_rc.ui.ConnectionsState
 import com.procyon.esp_rc.ui.JoyStick
 import com.procyon.esp_rc.ui.StatusLine
+import com.procyon.esp_rc.ui.XTrim
 import com.procyon.esp_rc.ui.theme.ESPRCExcerciseTheme
 import java.security.Permission
 import java.security.Permissions
@@ -95,7 +96,12 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
 
         val pos by vm.joyStickPos.collectAsState()
 
-        val (title, connectionState, joystick, readout, scanButton) = createRefs()
+        val (title,
+            connectionState,
+            joystick,
+            readout,
+            scanButton,
+            xTrimSlider) = createRefs()
 
         Text(
             "ESP RC fun!",
@@ -135,10 +141,19 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
             "X: ${pos.first}; Y: ${pos.second}",
             color = Color.White,
             modifier = Modifier.constrainAs(readout) {
-                top.linkTo(joystick.bottom, margin = 32.dp)
+                bottom.linkTo(joystick.top, margin = 32.dp)
                 centerHorizontallyTo(parent)
             },
         )
+
+        val xTrim by vm.xTrim.collectAsState()
+
+        XTrim(modifier = Modifier.constrainAs(xTrimSlider){
+            top.linkTo(joystick.bottom, margin = 30.dp)
+            centerHorizontallyTo(parent)
+        },trim = xTrim) { newTrim ->
+            vm.updateXTrim(newTrim)
+        }
 
         Button(modifier = Modifier.constrainAs(scanButton){
             bottom.linkTo(parent.bottom, margin = 16.dp)

@@ -20,13 +20,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
     override val connectionState: StateFlow<ConnectionsState> = _connectionState
 
+    override val xTrim: StateFlow<Int> = MutableStateFlow(0)
+
     private val bleManager = BleManager(application) { state ->
         _connectionState.update { state }
+    }
+
+    override fun updateXTrim(trim: Int) {
+        (xTrim as MutableStateFlow).tryEmit(trim)
+
+        val data = Triple(joyStickPos.value.first, joyStickPos.value.second, trim)
+        updateBle(data)
     }
 
     override fun updateJoystickPos(x: Int, y: Int) {
         val pos = Pair(x, y)
         _joyStickPos.update { pos }
+
+        val data = Triple(x, y, xTrim.value)
+        updateBle(data)
+    }
+
+    private fun updateBle(pos: Triple< /*x = */ Int, /*y = */  Int, /*xTrim = */ Int>) {
         if (_connectionState.value == ConnectionsState.Connected) {
             bleManager.sendJoystickData(pos)
         }
@@ -44,12 +59,17 @@ class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
 
     private val _joyStickPos = MutableStateFlow(Pair(0, 0))
     override val joyStickPos: StateFlow<Pair<Int, Int>> = _joyStickPos
+    override val xTrim: StateFlow<Int> = MutableStateFlow(0)
 
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
     override val connectionState: StateFlow<ConnectionsState> = _connectionState
 
     override fun updateJoystickPos(x: Int, y: Int) {
         _joyStickPos.update { Pair(x, y) }
+    }
+
+    override fun updateXTrim(trim: Int) {
+        (xTrim as MutableStateFlow).tryEmit(trim)
     }
 
     override fun startScan() {
@@ -71,6 +91,10 @@ interface MainViewModelInter {
     val joyStickPos: StateFlow<Pair<Int, Int>>
     fun updateJoystickPos(x: Int, y: Int)
     val connectionState: StateFlow<ConnectionsState>
+
+    val xTrim : StateFlow<Int>
+
+    fun updateXTrim(trim: Int)
 
     fun startScan()
 

@@ -11,15 +11,28 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +42,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,10 +54,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.procyon.esp_rc.R
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 
@@ -76,51 +97,46 @@ fun JoyStick(modifier: Modifier = Modifier, density: Density = LocalDensity.curr
     Canvas(modifier
         .size(size)
         .pointerInput(Unit) {
-            detectDragGestures(
-                onDragStart = { touchoffset ->
-                    if ((touchoffset - thumbPosAnimatable.value).getDistance() <= thumbRadius) {
-                        draggable = true
-                        scope.launch {
-                            thumbPosAnimatable.animateTo(
-                                targetValue = touchoffset,
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy
-                                )
-                            )
-                        }
-                    } else {
-                        draggable = false
-                    }
-
-                },
-                onDrag = { change, dragAmount ->
-                    if (draggable) {
-                        val absoluteCenter = Offset(
-                            x = change.position.x.coerceIn(thumbRadius, (center * 2) - thumbRadius),
-                            y = change.position.y.coerceIn(thumbRadius, (center * 2) - thumbRadius)
-                        )
-
-
-                        val adjustedCenter = absoluteCenter /*+ dragOffset*/
-                        scope.launch {
-                            thumbPosAnimatable.snapTo(adjustedCenter)
-                        }
-                    }
-
-                },
-                onDragEnd = {
+            detectDragGestures(onDragStart = { touchoffset ->
+                if ((touchoffset - thumbPosAnimatable.value).getDistance() <= thumbRadius) {
+                    draggable = true
                     scope.launch {
                         thumbPosAnimatable.animateTo(
-                            targetValue = Offset(center, center),
-                            animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy
-                                )
+                            targetValue = touchoffset, animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy
                             )
-                        }
+                        )
                     }
+                } else {
+                    draggable = false
+                }
 
-                )
+            }, onDrag = { change, dragAmount ->
+                if (draggable) {
+                    val absoluteCenter = Offset(
+                        x = change.position.x.coerceIn(thumbRadius, (center * 2) - thumbRadius),
+                        y = change.position.y.coerceIn(thumbRadius, (center * 2) - thumbRadius)
+                    )
+
+
+                    val adjustedCenter = absoluteCenter /*+ dragOffset*/
+                    scope.launch {
+                        thumbPosAnimatable.snapTo(adjustedCenter)
+                    }
+                }
+
+            }, onDragEnd = {
+                scope.launch {
+                    thumbPosAnimatable.animateTo(
+                        targetValue = Offset(center, center), animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy
+                        )
+                    )
+                }
             }
+
+            )
+        }
         ) {
         //draw border
         drawCircle(color = Color.White, style = Stroke(width = 1.dp.toPx()))
@@ -187,4 +203,98 @@ fun StatusLine(modifier: Modifier = Modifier, state: ConnectionsState) {
 @Composable
 private fun StatusLinePreview() {
     StatusLine(state = ConnectionsState.Connecting)
+}
+
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun XTrim(modifier: Modifier = Modifier, trimIncrement : Int = 1, trim: Int, updateTrim: (Int) -> Unit) {
+
+    Row(modifier
+        .fillMaxWidth(0.8f)
+        .height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+
+        ContinuesPressFab(action = { updateTrim(trim - trimIncrement)}) {
+            Icon(painter = painterResource(R.drawable.remove_24px),
+                contentDescription = "subtract")
+        }
+
+        Spacer(modifier = Modifier.width(8.dp),)
+
+        val progressBarWidth = with(LocalDensity.current){ 2.toDp().toPx() }
+        val progressBarCircleRadius = with(LocalDensity.current){ 58.toDp().toPx() }
+
+        val textMeasures = rememberTextMeasurer()
+
+
+        Canvas(modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight(),) {
+            drawLine(color = Color.White,
+                start = Offset(0f, center.y),
+                end = Offset(size.width, center.y),
+                strokeWidth = progressBarWidth)
+
+
+
+
+            val xPos = center.x + ((trim.coerceIn(-100..100) * (center.x / 2)) / (center.x / 2))
+            val centerOffset = Offset(xPos, center.y)
+
+            val textMeasureResult = textMeasures.measure(text = "$trim",
+                style = TextStyle.Default.copy(color = Color.Black, fontSize = 22.sp))
+            val textSize = textMeasureResult.size
+
+            drawCircle(Color.White,
+                radius = progressBarCircleRadius,
+                center = centerOffset)
+
+            drawText(textMeasureResult, topLeft = centerOffset.minus(Offset(textSize.width / 2f, textSize.height / 2f)),
+                )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        ContinuesPressFab(modifier = Modifier, action = { updateTrim(trim + trimIncrement) }){
+            Icon(Icons.Default.Add,
+                contentDescription = "add")
+        }
+    }
+
+}
+
+@Composable
+fun ContinuesPressFab(modifier: Modifier = Modifier, action: () -> Unit, content: @Composable () -> Unit) {
+    val longClickScope = rememberCoroutineScope()
+    val currentAction by rememberUpdatedState(action)
+
+    SmallFloatingActionButton( onClick = {/*action()*/}, modifier = modifier
+        .pointerInput(Unit){
+            awaitEachGesture {
+                    val event = awaitFirstDown(requireUnconsumed = false)
+
+                    val longPresJob = longClickScope.launch {
+                        currentAction()
+                        delay(500)
+                        while (true){
+                            currentAction()
+                            delay(300)
+                        }
+                    }
+                    waitForUpOrCancellation()
+                    longPresJob.cancel()
+                }
+            }
+
+        , content = content,)
+
+}
+
+@Preview
+@Composable
+private fun XTrimPreview() {
+    var xTrim by remember { mutableIntStateOf(0) }
+
+    XTrim(modifier = Modifier.width(250.dp), trim = xTrim) { xTrim = it }
+    
 }

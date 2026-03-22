@@ -10,6 +10,8 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 int8_t x = 0;
 int8_t y = 0;
+int8_t x_trim = 0;
+
 bool dataStreamStarted = false;
 unsigned long lastRefreshTime = 0;
 const int refreshInterval = 200;
@@ -27,7 +29,7 @@ const int motorIn1 = 25;
 const int motorIn2 = 26;
 const int motorEna = 27;
 
-const int motorFreq = 5000;
+const int motorFreq = 500;
 const int motorChannel = 1; // timer 0 is allocated to steering
 const int pwmResolution = 8;
 
@@ -42,11 +44,12 @@ class MyCallback : public BLECharacteristicCallbacks {
       if(!dataStreamStarted){
         dataStreamStarted = true;
       };
-      x = (int8_t)data[0];
-      y = (int8_t)data[1];
+      x =      (int8_t)data[0];
+      y =      (int8_t)data[1];
+      x_trim = (int8_t)data[2];
 
       targetAngle = map(x, -100, 100, 0, 180);
-targetSpeed = y;      
+      targetSpeed = y;      
 
 
       Serial.print("X: ");
@@ -90,7 +93,7 @@ void loop() {
     // smoothedAngle += diff * smoothingFactor;
     // steeringServo.write((int)smoothedAngle);
     // Serial.print("Target: "); Serial.print(targetAngle); 
-    steeringServo.write(targetAngle);
+    steeringServo.write(targetAngle + x_trim);
 
     motorControll(targetSpeed);
     
