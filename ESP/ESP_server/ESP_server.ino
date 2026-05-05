@@ -1,6 +1,6 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
-#include <LiquidCrystal_I2C.h>
+// #include <LiquidCrystal_I2C.h>
 #include <ESP32Servo.h>
 
 #define SERVICE_UUID "6a0ff9be-1bce-46e5-9013-3b9ec78a338e"
@@ -18,16 +18,16 @@ const int refreshInterval = 200;
 
 
 //servo control
-const int SERVO_PIN = 13;
+const int SERVO_PIN = 3;
 Servo steeringServo;
-
+ 
 float targetAngle = 90.0;
 
 
 //DC motor params:
-const int motorIn1 = 25;
-const int motorIn2 = 26;
-const int motorEna = 27;
+const int motorIn1 = 18;
+const int motorIn2 = 19;
+// const int motorEna = 27;
 
 const int motorFreq = 500;
 const int motorChannel = 1; // timer 0 is allocated to steering
@@ -35,11 +35,13 @@ const int pwmResolution = 8;
 
 int targetSpeed = 0;
 
+int blinkInterval = 0;
+
 void stopEverything() {
   //stop motor:
-  digitalWrite(motorIn1, LOW);
-  digitalWrite(motorIn2, LOW);
-  ledcWrite(motorEna, 0);
+  
+  ledcWrite(motorIn1, 0);
+  ledcWrite(motorIn2, 0);
 
   //reset steering servo:
   steeringServo.write(90);
@@ -64,7 +66,7 @@ class MyCharacteristicCallback : public BLECharacteristicCallbacks {
       y =      (int8_t)data[1];
       x_trim = (int8_t)data[2];
 
-      targetAngle = map(x, -100, 100, 0, 180);
+      targetAngle = map(x, -100, 100, 140, 40);
       targetSpeed = y;      
 
 
@@ -78,17 +80,19 @@ class MyCharacteristicCallback : public BLECharacteristicCallbacks {
 
 class MyServerCallback : public BLEServerCallbacks{
   void onConnect(BLEServer *pServer) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Connected!");
+    // lcd.clear();
+    // lcd.setCursor(0, 0);
+    // lcd.print("Connected!");
+    blinkInterval = 0;
 
   }
 
   void onDisconnect(BLEServer *pServer) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Disconnected");
+    // lcd.clear();
+    // lcd.setCursor(0, 0);
+    // lcd.print("Disconnected");
     stopEverything();
+    blinkInterval = 400;
 
   }
 };
@@ -97,12 +101,14 @@ class MyServerCallback : public BLEServerCallbacks{
 
 void setup() {
   Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
   //lcd init
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
+  // lcd.init();
+  // lcd.backlight();
+  // lcd.clear();
+  // lcd.setCursor(0, 0);
+  // lcd.print("Connecting...");
+  blinkInterval = 200;
 
   bluetoothInit();
 
@@ -113,15 +119,16 @@ void setup() {
   steeringServo.write(90);
   
   // Motor setup
-  pinMode(motorIn1, OUTPUT);
-  pinMode(motorIn2, OUTPUT);
-  ledcAttach(motorEna, motorFreq, pwmResolution);
+  ledcAttach(motorIn1, motorFreq, pwmResolution);
+  ledcAttach(motorIn2, motorFreq, pwmResolution);
+
 }
 
 
 void loop() {
   // put your main code here, to run repeatedly:
-  printToScreen();
+  // printToScreen();
+  ledStatus();
 
   if(dataStreamStarted){
     // float diff = targetAngle - smoothedAngle;
@@ -131,31 +138,39 @@ void loop() {
     steeringServo.write(targetAngle + x_trim);
 
     motorControll(targetSpeed);
-    
-   
 
   }
 
   delay(10);
 }
 
-void motorControll(int8_t speed){
+int currentSpeed = 0;
+int rampValue = 3;
 
-  int absSpeed = abs(speed);
-  int pwmValue = map(absSpeed, 0, 100, 0, 255);
+void motorControll(int8_t setSpeed){
 
-  if(speed > 5){
-    digitalWrite(motorIn1, HIGH);
-    digitalWrite(motorIn2, LOW);
-    ledcWrite(motorEna, pwmValue);
-  } else if(speed < 5){
-    digitalWrite(motorIn1, LOW);
-    digitalWrite(motorIn2, HIGH);
-    ledcWrite(motorEna, pwmValue);
+  // if(currentSpeed < setSpeed){
+  //   int diff = abs(setSpeed - currentSpeed);
+  //   int increment = min(rampValue, diff);
+  //   currentSpeed =+ increment;
+  // } else if(currentSpeed > setSpeed){
+  //   int diff = abs(setSpeed - currentSpeed);
+  //   int increment = min(diff, rampValue);
+  //   currentSpeed =- increment;
+  // }
+
+  int absSpeed = abs(setSpeed);
+  int pwmValue = map(absSpeed, 0, 100, 0, 200);
+
+  if(setSpeed > 5){
+    ledcWrite(motorIn1, pwmValue);
+    ledcWrite(motorIn2, 0);
+  } else if(setSpeed < 5){
+    ledcWrite(motorIn1, 0);
+    ledcWrite(motorIn2, pwmValue);
   } else {
-    digitalWrite(motorIn1, LOW);
-    digitalWrite(motorIn2, LOW);
-    ledcWrite(motorEna, 0);
+    ledcWrite(motorIn1, 0);
+    ledcWrite(motorIn2, 0);
   }
 
 }
@@ -178,19 +193,42 @@ void bluetoothInit() {
   pServer->getAdvertising()->start();
 }
 
+unsigned long lastBlinkFlip = 0;
+int blinkState = LOW;
+
+void ledStatus(){
+  if(blinkInterval == 0){
+    digitalWrite(BUILTIN_LED, HIGH);
+  } else {
+    unsigned long now = millis();
+  
+    if(now - lastBlinkFlip > blinkInterval){
+      if(blinkState == LOW){
+        blinkState = HIGH;
+      } else {
+        blinkState = LOW;
+      }
+      lastBlinkFlip = now;
+    }
+    digitalWrite(BUILTIN_LED, blinkState);
 
 
-void printToScreen() {
-  unsigned long now = millis();
-
-  if (dataStreamStarted && now - lastRefreshTime >= refreshInterval) {
-    lastRefreshTime = now;
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("X: ");
-    lcd.print(x);
-    lcd.setCursor(0, 1);
-    lcd.print("Y: ");
-    lcd.print(y);
   }
 }
+
+
+
+// void printToScreen() {
+//   unsigned long now = millis();
+
+//   if (dataStreamStarted && now - lastRefreshTime >= refreshInterval) {
+//     lastRefreshTime = now;
+//     lcd.clear();
+//     lcd.setCursor(0, 0);
+//     lcd.print("X: ");
+//     lcd.print(x);
+//     lcd.setCursor(0, 1);
+//     lcd.print("Y: ");
+//     lcd.print(y);
+//   }
+// }
