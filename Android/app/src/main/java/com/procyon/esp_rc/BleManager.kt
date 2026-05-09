@@ -1,5 +1,7 @@
 package com.procyon.esp_rc
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -14,6 +16,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import com.procyon.esp_rc.ui.ConnectionsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+@SuppressLint("MissingPermission")
 @OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit) {
     private val TAG = this::class.simpleName
@@ -51,6 +55,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startScan() {
         if (bluetoothAdapter == null) {
             status(ConnectionsState.Error)
@@ -63,6 +68,8 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         val scanner = bluetoothAdapter!!.bluetoothLeScanner
         val scanCallback = object : ScanCallback() {
 
+            @SuppressLint("MissingPermission")
+            @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 scanner.stopScan(this)
                 result?.also {
@@ -86,9 +93,12 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         scanner.startScan(listOf(filter), setting, scanCallback)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun connect(device: BluetoothDevice) {
         status(ConnectionsState.Connecting)
         bluetoothGatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
+
+            @SuppressLint("MissingPermission")
             override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
@@ -117,6 +127,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         posFlow.tryEmit(pos)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun performWrite(pos: Triple<Int, Int, Int>) {
         val (x: Int, y: Int, xTrim: Int) = pos
         val service = bluetoothGatt?.getService(SERVICE_UUID)

@@ -1,7 +1,6 @@
 package com.procyon.esp_rc
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,19 +28,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.core.content.ContextCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.accompanist.permissions.rememberPermissionState
 import com.procyon.esp_rc.ui.ConnectionsState
 import com.procyon.esp_rc.ui.JoyStick
 import com.procyon.esp_rc.ui.StatusLine
 import com.procyon.esp_rc.ui.XTrim
 import com.procyon.esp_rc.ui.theme.ESPRCExcerciseTheme
-import java.security.Permission
-import java.security.Permissions
-import java.time.format.TextStyle
 
 class MainActivity : ComponentActivity() {
 
@@ -169,7 +163,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun MainContentPreview() {
     ESPRCExcerciseTheme {
         val scope = rememberCoroutineScope()
         Content(vm = MockViewModel(scope))
