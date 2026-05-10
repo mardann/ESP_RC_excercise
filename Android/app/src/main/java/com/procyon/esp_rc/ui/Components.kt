@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.procyon.esp_rc.BleManager
 import com.procyon.esp_rc.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,7 +169,7 @@ private fun JoystickPreview() {
 }
 
 @Composable
-fun StatusLine(modifier: Modifier = Modifier, state: ConnectionsState) {
+fun StatusLine(modifier: Modifier = Modifier, state: ConnectionsState, telemetry: BleManager.Telemetry) {
     val alpha by if (state.flashing) {
         val infiniteTransition = rememberInfiniteTransition(label = "flashingTransition")
         infiniteTransition.animateFloat(
@@ -182,7 +184,7 @@ fun StatusLine(modifier: Modifier = Modifier, state: ConnectionsState) {
     } else {
         remember { mutableStateOf(1f) }
     }
-
+Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.padding(4.dp)) {
     Row(
         modifier = modifier.padding(4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -197,12 +199,14 @@ fun StatusLine(modifier: Modifier = Modifier, state: ConnectionsState) {
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = state.text, color = Color.White)
     }
+    Text("Raw milliV: ${telemetry.rawVoltage}, Voltage: ${telemetry.centiVoltageAdjusted / 100f}, Percent: ${telemetry.batteryPercent}%", color = Color.White)
+}
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun StatusLinePreview() {
-    StatusLine(state = ConnectionsState.Connecting)
+    StatusLine(state = ConnectionsState.Connecting, telemetry = BleManager.Telemetry())
 }
 
 

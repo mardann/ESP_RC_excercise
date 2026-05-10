@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
@@ -23,18 +24,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @SuppressLint("MissingPermission")
 @OptIn(FlowPreview::class)
-class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit) {
+class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit, val telemetry:( Telemetry) -> Unit) {
+
+    data class Telemetry(val rawVoltage:Int = 0, val centiVoltageAdjusted: Int = 0, val batteryPercent: Int = 0);
+    var localTelemetry = Telemetry()
+
     private val TAG = this::class.simpleName
     private var bluetoothGatt: BluetoothGatt? = null
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
@@ -118,8 +121,30 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (status == BluetoothGatt.GATT_SUCCESS && gatt != null) {
                     status(ConnectionsState.Connected)
+
+                    val uplinkCharactaristic = gatt.getService(SERVICE_UUID).getCharacteristic(UPLINK_CHARACTARISTIC_UUID)
+                    gatt.setCharacteristicNotification(uplinkCharactaristic, true)
+
+                    val descriptor = uplinkCharactaristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+
+                    gatt.writeDescriptor(
+                        descriptor,
+                        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+
+                }
+            }
+
+            override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+                if(characteristic.uuid == UPLINK_CHARACTARISTIC_UUID){
+                    val raw = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
+                    val centiVolt = ((value[2].toInt() and 0xFF) shl 8) or (value[2].toInt() and 0xFF)
+                    val percent = value[4].toInt() and 0xFF
+
+                    localTelemetry = localTelemetry.copy(rawVoltage = raw, centiVoltageAdjusted = centiVolt, batteryPercent = percent)
+
+                    telemetry(localTelemetry)
                 }
             }
 
@@ -158,7 +183,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     private fun performWrite(pos: Triple<Int, Int, Int>) {
         val (x: Int, y: Int, xTrim: Int) = pos
         val service = bluetoothGatt?.getService(SERVICE_UUID)
-        val characteristic = service?.getCharacteristic(CHARACTERISTIC_UUID)
+        val characteristic = service?.getCharacteristic(DRIVE_CHARACTERISTIC_UUID)
 
         if (characteristic != null) {
             val payload = byteArrayOf(x.toByte(), y.toByte(), xTrim.toByte())

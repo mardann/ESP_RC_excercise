@@ -113,9 +113,11 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
         )
 
         val connectionStatus by vm.connectionState.collectAsState()
+        val telemetry by vm.telemetryState.collectAsState()
 
         StatusLine(
             state = connectionStatus,
+            telemetry = telemetry,
             modifier = Modifier.constrainAs(connectionState) {
                 top.linkTo(title.bottom, margin = 8.dp)
                 centerHorizontallyTo(parent)

@@ -1,11 +1,13 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
+#include <BLE2902.h>
 #include <LiquidCrystal_I2C.h>
 #include <ESP32Servo.h>
 #include <Adafruit_NeoPixel.h>
 
 #define SERVICE_UUID "6a0ff9be-1bce-46e5-9013-3b9ec78a338e"
-#define CHARACTARISTIC_UUID "0bed3ebb-e9b0-4b4e-95f4-44677fd04f24"
+#define DRIVE_CHARACTARISTIC_UUID "0bed3ebb-e9b0-4b4e-95f4-44677fd04f24"
+#define UPLINK_CHARACTARISC_UUID "5b78888f-1cff-4615-9922-9924c724b489"
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -15,7 +17,13 @@ int8_t x_trim = 0;
 
 bool dataStreamStarted = false;
 unsigned long lastRefreshTime = 0;
-const int refreshInterval = 200;
+const uint16_t refreshInterval = 200;
+
+unsigned long lastUplinkSent = 0;
+const uint16_t uplinkInterval = 300;
+
+//uplink
+BLECharacteristic *pUplinkCharachtaristics = nullptr;
 
 
 //servo control
@@ -37,9 +45,10 @@ const int pwmResolution = 8;
 int targetSpeed = 0;
 
 //indicaor LED
-
 int rgbPin = 8;
 Adafruit_NeoPixel grb(1, rgbPin);
+
+int batteryLevelPin = 0;
 
 
 void stopEverything() {
@@ -90,6 +99,9 @@ void setup() {
   ledcAttach(motorIn1, motorFreq, pwmResolution);
   ledcAttach(motorIn2, motorFreq, pwmResolution);
 
+  //battery level
+  pinMode(batteryLevelPin, ANALOG);
+
 }
 
 
@@ -97,6 +109,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   // printToScreen();
   
+  batteryLevelCalculation();
 
   if(dataStreamStarted){
     // float diff = targetAngle - smoothedAngle;
@@ -196,21 +209,60 @@ void bluetoothInit() {
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  BLECharacteristic *pCharactaristic = pService->createCharacteristic(
-    CHARACTARISTIC_UUID,
+   pServer->setCallbacks(new MyServerCallback());
+
+  BLECharacteristic *pDriveCharactaristic = pService->createCharacteristic(
+    DRIVE_CHARACTARISTIC_UUID,
     BLECharacteristic::PROPERTY_WRITE);
 
-  pServer->setCallbacks(new MyServerCallback());
+  pDriveCharactaristic->setCallbacks(new MyCharacteristicCallback());
 
-  pCharactaristic->setCallbacks(new MyCharacteristicCallback());
+  pUplinkCharachtaristics = pService->createCharacteristic(
+    UPLINK_CHARACTARISC_UUID,
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pUplinkCharachtaristics->addDescriptor(new BLE2902());
+
+
   pService->start();
 
   pServer->getAdvertising()->addServiceUUID(SERVICE_UUID);
   pServer->getAdvertising()->start();
 }
 
+//for 3s 11.1v battery
+const uint16_t batteryMaxCentiVolts = 1260; //max after division 2.21
+const uint16_t  batteryMinCentiVolts = 960;  //min after division 1.682
+//using a voltage devider R1 = 10kR, R2 = 47KR. 10 / 57 = 0.175... 
+// (2.21 / 3.3) * 4045 = 2742. this is the max analog read value that represents a full 12.6 battery.
 
+uint16_t rawReading;
+uint16_t voltageReading;
+uint8_t percentFull;
 
+void batteryLevelCalculation(){
+   rawReading = analogReadMilliVolts(batteryLevelPin); // 0 to 4095
+   voltageReading = map(rawReading, 0, 2907, 0, batteryMaxCentiVolts);
+   percentFull = map(voltageReading, batteryMinCentiVolts, batteryMaxCentiVolts, 0, 100);
+  Serial.print("Raw: "); Serial.print(rawReading); Serial.print(", Battery Centi V: "); Serial.print(voltageReading); Serial.print(", Percent: "); Serial.println(percentFull);
+
+}
+
+void uplinkUpdate(){
+  if(millis() - lastUplinkSent > uplinkInterval && pUplinkCharachtaristics != nullptr){
+      lastUplinkSent = millis();
+      uint8_t uplinkData[5];
+      //raw voltage from ADC
+      uplinkData[0] = (rawReading >> 8) & 0xFF;
+      uplinkData[1] = rawReading & 0xFF;
+      uplinkData[2] = (voltageReading >> 8) & 0xFF;
+      uplinkData[3] = voltageReading & 0xFF;
+      uplinkData[4] = percentFull;
+
+      pUplinkCharachtaristics->setValue(uplinkData, 5);
+      pUplinkCharachtaristics->notify();
+  }
+}
 
 
 // void printToScreen() {

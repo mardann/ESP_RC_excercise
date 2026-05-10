@@ -20,11 +20,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
     override val connectionState: StateFlow<ConnectionsState> = _connectionState
 
+    private val _telemetry = MutableStateFlow(BleManager.Telemetry())
+    override val telemetryState: StateFlow<BleManager.Telemetry> = _telemetry
+
+
     override val xTrim: StateFlow<Int> = MutableStateFlow(0)
 
-    private val bleManager = BleManager(application) { state ->
+    private val bleManager = BleManager(application, { state ->
         _connectionState.update { state }
-    }
+    },{telemetry -> })
 
     override fun updateXTrim(trim: Int) {
         (xTrim as MutableStateFlow).tryEmit(trim)
@@ -63,6 +67,8 @@ class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
 
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
     override val connectionState: StateFlow<ConnectionsState> = _connectionState
+    override val telemetryState: StateFlow<BleManager.Telemetry>
+        = MutableStateFlow(BleManager.Telemetry())
 
     override fun updateJoystickPos(x: Int, y: Int) {
         _joyStickPos.update { Pair(x, y) }
@@ -91,6 +97,7 @@ interface MainViewModelInter {
     val joyStickPos: StateFlow<Pair<Int, Int>>
     fun updateJoystickPos(x: Int, y: Int)
     val connectionState: StateFlow<ConnectionsState>
+    val telemetryState: StateFlow<BleManager.Telemetry>
 
     val xTrim : StateFlow<Int>
 
