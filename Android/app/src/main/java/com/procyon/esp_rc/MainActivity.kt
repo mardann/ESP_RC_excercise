@@ -155,7 +155,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
         }, onClick = vm::startScan,
             enabled = (connectionStatus == ConnectionsState.Disconnected || connectionStatus == ConnectionsState.Error) && hasBtPermission
         ) {
-            Text("Scan", style = MaterialTheme.typography.bodyLarge)
+            Text("Connect", style = MaterialTheme.typography.bodyLarge)
         }
     }
 

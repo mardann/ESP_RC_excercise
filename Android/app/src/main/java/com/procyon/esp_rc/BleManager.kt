@@ -23,8 +23,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -44,6 +46,7 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     private val scope = CoroutineScope(Dispatchers.IO)
     private val timeoutScope = CoroutineScope(Dispatchers.Default)
     var timeoutJob : Job? = null
+    var reconnectJob :  Job? = null
 
     init {
         scope.launch {
@@ -103,12 +106,12 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
                         gatt?.discoverServices()
+                        reconnectJob?.cancel()
                     }
 
                     BluetoothProfile.STATE_DISCONNECTED -> {
-                        status(ConnectionsState.Disconnected)
-                        bluetoothGatt?.close()
-                        bluetoothGatt = null
+                        attemptReconnect()
+
                     }
                 }
 
@@ -121,6 +124,30 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
             }
 
         })
+    }
+
+    private val reconnectDuration = 60_000L
+
+    fun attemptReconnect(){
+        status(ConnectionsState.Reconnecting)
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+
+        reconnectJob = scope.launch {
+            val startReconnectTimeStamp = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startReconnectTimeStamp < reconnectDuration && bluetoothGatt == null){
+
+                startScan()
+
+                delay(5.seconds)
+            }
+
+            if(bluetoothGatt == null){
+                status(ConnectionsState.Disconnected)
+            }
+        }
+
+
     }
 
     fun sendJoystickData(pos: Triple<Int, Int, Int>) {

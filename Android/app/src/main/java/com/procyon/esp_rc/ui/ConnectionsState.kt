@@ -7,5 +7,6 @@ enum class ConnectionsState(val color: Color, val text: String, val flashing: Bo
     Connecting(Color.Green, "Connecting...", true),
     Connected(Color.Green, "Connected", false),
     Disconnected(Color.Red, "Disconnected", false),
+    Reconnecting(Color.Yellow, "Reconnecting...", true),
     Error(Color.Red, "Disconnected", true)
 }

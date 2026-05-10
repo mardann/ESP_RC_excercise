@@ -1,7 +1,8 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
-// #include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal_I2C.h>
 #include <ESP32Servo.h>
+#include <Adafruit_NeoPixel.h>
 
 #define SERVICE_UUID "6a0ff9be-1bce-46e5-9013-3b9ec78a338e"
 #define CHARACTARISTIC_UUID "0bed3ebb-e9b0-4b4e-95f4-44677fd04f24"
@@ -35,7 +36,11 @@ const int pwmResolution = 8;
 
 int targetSpeed = 0;
 
-int blinkInterval = 0;
+//indicaor LED
+
+int rgbPin = 8;
+Adafruit_NeoPixel grb(1, rgbPin);
+
 
 void stopEverything() {
   //stop motor:
@@ -54,61 +59,21 @@ void stopEverything() {
 
 }
 
-
-class MyCharacteristicCallback : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharactaristic) {
-    uint8_t *data = pCharactaristic->getData();
-    if (pCharactaristic->getLength() >= 3) {
-      if(!dataStreamStarted){
-        dataStreamStarted = true;
-      };
-      x =      (int8_t)data[0];
-      y =      (int8_t)data[1];
-      x_trim = (int8_t)data[2];
-
-      targetAngle = map(x, -100, 100, 140, 40);
-      targetSpeed = y;      
-
-
-      Serial.print("X: ");
-      Serial.print(x);
-      Serial.print("; Y: ");
-      Serial.println(y);
-    }
-  }
-};
-
-class MyServerCallback : public BLEServerCallbacks{
-  void onConnect(BLEServer *pServer) {
-    // lcd.clear();
-    // lcd.setCursor(0, 0);
-    // lcd.print("Connected!");
-    blinkInterval = 0;
-
-  }
-
-  void onDisconnect(BLEServer *pServer) {
-    // lcd.clear();
-    // lcd.setCursor(0, 0);
-    // lcd.print("Disconnected");
-    stopEverything();
-    blinkInterval = 400;
-
-  }
-};
-
-
-
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
+  // pinMode(LED_BUILTIN, OUTPUT);
   //lcd init
   // lcd.init();
   // lcd.backlight();
   // lcd.clear();
   // lcd.setCursor(0, 0);
   // lcd.print("Connecting...");
-  blinkInterval = 200;
+  
+
+  grb.begin();
+  grb.setBrightness(100);
+  grb.setPixelColor(0, 252, 94, 3);
+  grb.show();
 
   bluetoothInit();
 
@@ -128,7 +93,7 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   // printToScreen();
-  ledStatus();
+  
 
   if(dataStreamStarted){
     // float diff = targetAngle - smoothedAngle;
@@ -143,6 +108,55 @@ void loop() {
 
   delay(10);
 }
+
+
+class MyCharacteristicCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharactaristic) {
+    uint8_t *data = pCharactaristic->getData();
+    if (pCharactaristic->getLength() >= 3) {
+      if(!dataStreamStarted){
+        dataStreamStarted = true;
+      };
+      x =      (int8_t)data[0];
+      y =      (int8_t)data[1];
+      x_trim = (int8_t)data[2];
+
+      targetAngle = map(x, -100, 100, 135, 45);
+      targetSpeed = y;      
+
+
+      Serial.print("X: ");
+      Serial.print(x);
+      Serial.print("; Y: ");
+      Serial.println(y);
+    }
+  }
+};
+
+class MyServerCallback : public BLEServerCallbacks{
+  void onConnect(BLEServer *pServer) {
+    // lcd.clear();
+    // lcd.setCursor(0, 0);
+    // lcd.print("Connected!");
+    
+    grb.setPixelColor(0, 0, 255, 0);
+    grb.show();
+
+  }
+
+  void onDisconnect(BLEServer *pServer) {
+    // lcd.clear();
+    // lcd.setCursor(0, 0);
+    // lcd.print("Disconnected");
+    stopEverything();
+    pServer->getAdvertising()->start();
+    grb.setPixelColor(0, 255, 0, 0);
+    grb.show();
+    
+
+  }
+};
+
 
 int currentSpeed = 0;
 int rampValue = 3;
@@ -193,28 +207,7 @@ void bluetoothInit() {
   pServer->getAdvertising()->start();
 }
 
-unsigned long lastBlinkFlip = 0;
-int blinkState = LOW;
 
-void ledStatus(){
-  if(blinkInterval == 0){
-    digitalWrite(BUILTIN_LED, HIGH);
-  } else {
-    unsigned long now = millis();
-  
-    if(now - lastBlinkFlip > blinkInterval){
-      if(blinkState == LOW){
-        blinkState = HIGH;
-      } else {
-        blinkState = LOW;
-      }
-      lastBlinkFlip = now;
-    }
-    digitalWrite(BUILTIN_LED, blinkState);
-
-
-  }
-}
 
 
 
