@@ -26,8 +26,8 @@ float targetAngle = 90.0;
 
 
 //DC motor params:
-const int motorIn1 = 18;
-const int motorIn2 = 19;
+const int motorIn1 = 5;
+const int motorIn2 = 4;
 // const int motorEna = 27;
 
 const int motorFreq = 500;
@@ -61,7 +61,10 @@ void stopEverything() {
 
 void setup() {
   Serial.begin(115200);
-  // pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(motorIn1, OUTPUT);
+  pinMode(motorIn2, OUTPUT);
+  digitalWrite(motorIn1, LOW);
+  digitalWrite(motorIn2, LOW);
   //lcd init
   // lcd.init();
   // lcd.backlight();
@@ -121,7 +124,7 @@ class MyCharacteristicCallback : public BLECharacteristicCallbacks {
       y =      (int8_t)data[1];
       x_trim = (int8_t)data[2];
 
-      targetAngle = map(x, -100, 100, 135, 45);
+      targetAngle = map(x, -100, 100, 125, 55);
       targetSpeed = y;      
 
 
@@ -159,7 +162,6 @@ class MyServerCallback : public BLEServerCallbacks{
 
 
 int currentSpeed = 0;
-int rampValue = 3;
 
 void motorControll(int8_t setSpeed){
 
@@ -179,7 +181,7 @@ void motorControll(int8_t setSpeed){
   if(setSpeed > 5){
     ledcWrite(motorIn1, pwmValue);
     ledcWrite(motorIn2, 0);
-  } else if(setSpeed < 5){
+  } else if(setSpeed < -5){
     ledcWrite(motorIn1, 0);
     ledcWrite(motorIn2, pwmValue);
   } else {
