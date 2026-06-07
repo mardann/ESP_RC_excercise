@@ -2,14 +2,32 @@
 #include <BLEServer.h>
 #include <BLE2902.h>
 #include <LiquidCrystal_I2C.h>
-#include <ESP32Servo.h>
-#include <Adafruit_NeoPixel.h>
+// #include <ESP32Servo.h>
+// #include <Adafruit_NeoPixel.h>
 
 #define SERVICE_UUID "6a0ff9be-1bce-46e5-9013-3b9ec78a338e"
 #define DRIVE_CHARACTARISTIC_UUID "0bed3ebb-e9b0-4b4e-95f4-44677fd04f24"
 #define UPLINK_CHARACTARISC_UUID "5b78888f-1cff-4615-9922-9924c724b489"
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+#define SERVO_PIN 4
+#define MOTOR_IN1_PIN 16
+#define MOTOR_IN2_PIN 17
+
+#define LED_PIN 15
+
+//reserve for future:
+#define US_TRIG_PIN 32
+#define US_ECHO_PIN 33
+//in mm/µs units
+#define SOUND_SPEED 0.343
+//asuming 4m is the max range of the HC-SR04 sensor, double for to and fro, and add a buffer for 10m, it'll take 29155µs to travel that distance
+#define MAX_DISTANCE_TIMEOUT 29155
+
+#define I2C_SCL_PIN 22
+#define I2C_SDA_PIN 21
+
+
+// LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 int8_t x = 0;
 int8_t y = 0;
@@ -27,100 +45,110 @@ BLECharacteristic *pUplinkCharachtaristics = nullptr;
 
 
 //servo control
-const int SERVO_PIN = 3;
-Servo steeringServo;
- 
+// Servo steeringServo;
+
 float targetAngle = 90.0;
 
-
-//DC motor params:
-const int motorIn1 = 5;
-const int motorIn2 = 4;
-// const int motorEna = 27;
-
 const int motorFreq = 500;
-const int motorChannel = 1; // timer 0 is allocated to steering
+const int motorChannel = 1;  // timer 0 is allocated to steering
 const int pwmResolution = 8;
 
 int targetSpeed = 0;
 
-//indicaor LED
-int rgbPin = 8;
-Adafruit_NeoPixel grb(1, rgbPin);
+//distance measurment
+long distanceMM = 0;
 
-int batteryLevelPin = 0;
+
+
+
 
 
 void stopEverything() {
   //stop motor:
-  
-  ledcWrite(motorIn1, 0);
-  ledcWrite(motorIn2, 0);
+
+  ledcWrite(MOTOR_IN1_PIN, 0);
+  ledcWrite(MOTOR_IN2_PIN, 0);
 
   //reset steering servo:
-  steeringServo.write(90);
+  // steeringServo.write(90);
+ 
+  ledcWrite(SERVO_PIN, 307);
 
   //reset params:
   x = 0;
   y = 0;
   x_trim = 0;
   dataStreamStarted = false;
-
 }
 
 void setup() {
   Serial.begin(115200);
-  pinMode(motorIn1, OUTPUT);
-  pinMode(motorIn2, OUTPUT);
-  digitalWrite(motorIn1, LOW);
-  digitalWrite(motorIn2, LOW);
+  Serial.println("setup called");
+  pinMode(MOTOR_IN1_PIN, OUTPUT);
+  pinMode(MOTOR_IN2_PIN, OUTPUT);
+  digitalWrite(MOTOR_IN1_PIN, LOW);
+  digitalWrite(MOTOR_IN2_PIN, LOW);
+
+  pinMode(US_TRIG_PIN, OUTPUT);
+  pinMode(US_ECHO_PIN, INPUT);
+
   //lcd init
   // lcd.init();
   // lcd.backlight();
   // lcd.clear();
   // lcd.setCursor(0, 0);
   // lcd.print("Connecting...");
-  
-
-  grb.begin();
-  grb.setBrightness(100);
-  grb.setPixelColor(0, 252, 94, 3);
-  grb.show();
+  pinMode(LED_PIN, OUTPUT);
+  ledcAttach(LED_PIN, 5, 8);
+  ledcWrite(LED_PIN, 128);
+  // grb.begin();
+  // grb.setBrightness(100);
+  // grb.setPixelColor(0, 252, 94, 3);
+  // grb.show();
 
   bluetoothInit();
 
   // Servo setup
-  ESP32PWM::allocateTimer(0);
-  steeringServo.setPeriodHertz(50);
-  steeringServo.attach(SERVO_PIN, 500, 2400);
-  steeringServo.write(90);
-  
+  // ESP32PWM::allocateTimer(0);
+
+   ledcAttach(SERVO_PIN, 50, 12); // Pin 4, 50Hz Frequency, 12-bit Resolution
+   ledcWrite(SERVO_PIN, 307);
+  // steeringServo.setPeriodHertz(50);
+  // steeringServo.attach(SERVO_PIN, 500, 2400);
+  // steeringServo.write(90);
+
   // Motor setup
-  ledcAttach(motorIn1, motorFreq, pwmResolution);
-  ledcAttach(motorIn2, motorFreq, pwmResolution);
-
-  //battery level
-  pinMode(batteryLevelPin, ANALOG);
-
+  ledcAttach(MOTOR_IN1_PIN, motorFreq, pwmResolution);
+  ledcAttach(MOTOR_IN2_PIN, motorFreq, pwmResolution);
 }
 
 
 void loop() {
   // put your main code here, to run repeatedly:
   // printToScreen();
-  
-  batteryLevelCalculation();
 
-  if(dataStreamStarted){
+  // batteryLevelCalculation();
+  
+
+
+  if (dataStreamStarted) {
     // float diff = targetAngle - smoothedAngle;
     // smoothedAngle += diff * smoothingFactor;
     // steeringServo.write((int)smoothedAngle);
-    // Serial.print("Target: "); Serial.print(targetAngle); 
-    steeringServo.write(targetAngle + x_trim);
+    // Serial.print("Target: "); Serial.print(targetAngle);
+    int servoPWM = map(targetAngle + x_trim, 0, 180, 102, 512);
+    ledcWrite(SERVO_PIN, servoPWM);
 
     motorControll(targetSpeed);
-
+    Serial.printf("X: %d; Y: %d\n", x, y);
+    
   }
+
+  distanceMM = measureDistanceMM();
+  float distanceCm = (float)distanceMM / 10;
+  Serial.printf("Distance (cm): %f\n", distanceCm);
+
+  uplinkUpdate();
 
   delay(10);
 }
@@ -130,34 +158,25 @@ class MyCharacteristicCallback : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharactaristic) {
     uint8_t *data = pCharactaristic->getData();
     if (pCharactaristic->getLength() >= 3) {
-      if(!dataStreamStarted){
+      if (!dataStreamStarted) {
         dataStreamStarted = true;
       };
-      x =      (int8_t)data[0];
-      y =      (int8_t)data[1];
-      x_trim = (int8_t)data[2];
+      x = (int8_t)data[0];
+      y = (int8_t)data[1];
+      x_trim = -(int8_t)data[2];
 
       targetAngle = map(x, -100, 100, 125, 55);
-      targetSpeed = y;      
-
-
-      Serial.print("X: ");
-      Serial.print(x);
-      Serial.print("; Y: ");
-      Serial.println(y);
+      targetSpeed = y;
     }
   }
 };
 
-class MyServerCallback : public BLEServerCallbacks{
+class MyServerCallback : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
     // lcd.clear();
     // lcd.setCursor(0, 0);
     // lcd.print("Connected!");
-    
-    grb.setPixelColor(0, 0, 255, 0);
-    grb.show();
-
+    ledcWrite(LED_PIN, 255);
   }
 
   void onDisconnect(BLEServer *pServer) {
@@ -166,50 +185,55 @@ class MyServerCallback : public BLEServerCallbacks{
     // lcd.print("Disconnected");
     stopEverything();
     pServer->getAdvertising()->start();
-    grb.setPixelColor(0, 255, 0, 0);
-    grb.show();
-    
-
+    ledcWrite(LED_PIN, 128);
   }
 };
 
 
 int currentSpeed = 0;
 
-void motorControll(int8_t setSpeed){
+void motorControll(int8_t setSpeed) {
 
-  // if(currentSpeed < setSpeed){
-  //   int diff = abs(setSpeed - currentSpeed);
-  //   int increment = min(rampValue, diff);
-  //   currentSpeed =+ increment;
-  // } else if(currentSpeed > setSpeed){
-  //   int diff = abs(setSpeed - currentSpeed);
-  //   int increment = min(diff, rampValue);
-  //   currentSpeed =- increment;
-  // }
+
 
   int absSpeed = abs(setSpeed);
-  int pwmValue = map(absSpeed, 0, 100, 0, 200);
+  int pwmValue = map(absSpeed, 0, 100, 0, 180);
 
-  if(setSpeed > 5){
-    ledcWrite(motorIn1, pwmValue);
-    ledcWrite(motorIn2, 0);
-  } else if(setSpeed < -5){
-    ledcWrite(motorIn1, 0);
-    ledcWrite(motorIn2, pwmValue);
+  if (setSpeed > 5) {
+    ledcWrite(MOTOR_IN1_PIN, pwmValue);
+    ledcWrite(MOTOR_IN2_PIN, 0);
+  } else if (setSpeed < -5) {
+    ledcWrite(MOTOR_IN1_PIN, 0);
+    ledcWrite(MOTOR_IN2_PIN, pwmValue);
   } else {
-    ledcWrite(motorIn1, 0);
-    ledcWrite(motorIn2, 0);
+    ledcWrite(MOTOR_IN1_PIN, 0);
+    ledcWrite(MOTOR_IN2_PIN, 0);
   }
-
 }
+
+
+
+float measureDistanceMM(){
+
+  digitalWrite(US_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(US_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(US_TRIG_PIN, LOW);
+
+  long rawPulsT  = pulseIn(US_ECHO_PIN, HIGH, MAX_DISTANCE_TIMEOUT);
+  Serial.print("Raw pulse t = "); Serial.println(rawPulsT);
+
+  return rawPulsT * SOUND_SPEED / 2;
+
+} 
 
 void bluetoothInit() {
   BLEDevice::init("ESP32_RC_CAR");
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-   pServer->setCallbacks(new MyServerCallback());
+  pServer->setCallbacks(new MyServerCallback());
 
   BLECharacteristic *pDriveCharactaristic = pService->createCharacteristic(
     DRIVE_CHARACTARISTIC_UUID,
@@ -219,8 +243,7 @@ void bluetoothInit() {
 
   pUplinkCharachtaristics = pService->createCharacteristic(
     UPLINK_CHARACTARISC_UUID,
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
+    BLECharacteristic::PROPERTY_NOTIFY);
   pUplinkCharachtaristics->addDescriptor(new BLE2902());
 
 
@@ -230,37 +253,23 @@ void bluetoothInit() {
   pServer->getAdvertising()->start();
 }
 
-//for 3s 11.1v battery
-const uint16_t batteryMaxCentiVolts = 1260; //max after division 2.21
-const uint16_t  batteryMinCentiVolts = 960;  //min after division 1.682
-//using a voltage devider R1 = 10kR, R2 = 47KR. 10 / 57 = 0.175... 
-// (2.21 / 3.3) * 4045 = 2742. this is the max analog read value that represents a full 12.6 battery.
 
-uint16_t rawReading;
-uint16_t voltageReading;
-uint8_t percentFull;
 
-void batteryLevelCalculation(){
-   rawReading = analogReadMilliVolts(batteryLevelPin); // 0 to 4095
-   voltageReading = map(rawReading, 0, 2907, 0, batteryMaxCentiVolts);
-   percentFull = map(voltageReading, batteryMinCentiVolts, batteryMaxCentiVolts, 0, 100);
-  Serial.print("Raw: "); Serial.print(rawReading); Serial.print(", Battery Centi V: "); Serial.print(voltageReading); Serial.print(", Percent: "); Serial.println(percentFull);
+void uplinkUpdate() {
+  if (millis() - lastUplinkSent > uplinkInterval && pUplinkCharachtaristics != nullptr) {
+    lastUplinkSent = millis();
+    uint8_t uplinkData[2];
 
-}
 
-void uplinkUpdate(){
-  if(millis() - lastUplinkSent > uplinkInterval && pUplinkCharachtaristics != nullptr){
-      lastUplinkSent = millis();
-      uint8_t uplinkData[5];
-      //raw voltage from ADC
-      uplinkData[0] = (rawReading >> 8) & 0xFF;
-      uplinkData[1] = rawReading & 0xFF;
-      uplinkData[2] = (voltageReading >> 8) & 0xFF;
-      uplinkData[3] = voltageReading & 0xFF;
-      uplinkData[4] = percentFull;
+   
+    uplinkData[0] = (distanceMM >> 8) & 0xFF;
+    uplinkData[1] = distanceMM & 0xFF;
+    // uplinkData[2] = (voltageReading >> 8) & 0xFF;
+    // uplinkData[3] = voltageReading & 0xFF;
+    // uplinkData[4] = percentFull;
 
-      pUplinkCharachtaristics->setValue(uplinkData, 5);
-      pUplinkCharachtaristics->notify();
+    pUplinkCharachtaristics->setValue(uplinkData, 2);
+    pUplinkCharachtaristics->notify();
   }
 }
 

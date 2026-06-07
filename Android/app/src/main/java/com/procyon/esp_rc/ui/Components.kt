@@ -73,7 +73,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun JoyStick(modifier: Modifier = Modifier, density: Density = LocalDensity.current, size : Dp = 200.dp, xy: (Pair<Int, Int>) -> Unit) {
 
-    val center by derivedStateOf { size.value * density.density / 2 }
+    val center by remember {  derivedStateOf { size.value * density.density / 2 }}
 
     val thumbPosAnimatable = remember { Animatable(Offset(center,center), Offset.VectorConverter) }
     val thumbRadius = with(density){30.dp.toPx()}
@@ -199,7 +199,7 @@ Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.p
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = state.text, color = Color.White)
     }
-    Text("Raw milliV: ${telemetry.rawVoltage}, Voltage: ${telemetry.centiVoltageAdjusted / 100f}, Percent: ${telemetry.batteryPercent}%", color = Color.White)
+    Text("Distance: ${telemetry.distanceMm / 10}", color = Color.White)
 }
 }
 

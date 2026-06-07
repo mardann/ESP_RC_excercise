@@ -28,7 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
     private val bleManager = BleManager(application, { state ->
         _connectionState.update { state }
-    },{telemetry -> })
+    },{telemetry -> _telemetry.tryEmit(telemetry)})
 
     override fun updateXTrim(trim: Int) {
         (xTrim as MutableStateFlow).tryEmit(trim)

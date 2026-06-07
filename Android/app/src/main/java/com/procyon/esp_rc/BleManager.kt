@@ -35,7 +35,7 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit, val telemetry:( Telemetry) -> Unit) {
 
-    data class Telemetry(val rawVoltage:Int = 0, val centiVoltageAdjusted: Int = 0, val batteryPercent: Int = 0);
+    data class Telemetry(val distanceMm: Int = 0);
     var localTelemetry = Telemetry()
 
     private val TAG = this::class.simpleName
@@ -137,12 +137,13 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
             }
 
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+                Log.d(TAG, "onCharacteristicChanged: charactaristic uuid = ${characteristic.uuid}, values = $value")
                 if(characteristic.uuid == UPLINK_CHARACTARISTIC_UUID){
-                    val raw = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
-                    val centiVolt = ((value[2].toInt() and 0xFF) shl 8) or (value[2].toInt() and 0xFF)
-                    val percent = value[4].toInt() and 0xFF
+                    val distanceMm = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
+//                    val centiVolt = ((value[2].toInt() and 0xFF) shl 8) or (value[2].toInt() and 0xFF)
+//                    val percent = value[4].toInt() and 0xFF
 
-                    localTelemetry = localTelemetry.copy(rawVoltage = raw, centiVoltageAdjusted = centiVolt, batteryPercent = percent)
+                    localTelemetry = localTelemetry.copy(distanceMm)
 
                     telemetry(localTelemetry)
                 }
