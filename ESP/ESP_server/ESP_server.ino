@@ -249,8 +249,12 @@ void bluetoothInit() {
 
   pService->start();
 
-  pServer->getAdvertising()->addServiceUUID(SERVICE_UUID);
-  pServer->getAdvertising()->start();
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+  pAdvertising->start();
 }
 
 
