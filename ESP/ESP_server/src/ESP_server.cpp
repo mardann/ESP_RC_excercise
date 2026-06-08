@@ -1,13 +1,16 @@
+#include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
+#include <BLEUtils.h>
 #include <BLE2902.h>
-#include <LiquidCrystal_I2C.h>
+#include "DriveHAL.h"
+// #include <LiquidCrystal_I2C.h>
 // #include <ESP32Servo.h>
 // #include <Adafruit_NeoPixel.h>
 
 #define SERVICE_UUID "6a0ff9be-1bce-46e5-9013-3b9ec78a338e"
 #define DRIVE_CHARACTARISTIC_UUID "0bed3ebb-e9b0-4b4e-95f4-44677fd04f24"
-#define UPLINK_CHARACTARISC_UUID "5b78888f-1cff-4615-9922-9924c724b489"
+#define UPLINK_CHARACTARISTIC_UUID "5b78888f-1cff-4615-9922-9924c724b489"
 
 #define SERVO_PIN 4
 #define MOTOR_IN1_PIN 16
@@ -49,15 +52,16 @@ BLECharacteristic *pUplinkCharachtaristics = nullptr;
 
 float targetAngle = 90.0;
 
-const int motorFreq = 500;
-const int motorChannel = 1;  // timer 0 is allocated to steering
-const int pwmResolution = 8;
-
 int targetSpeed = 0;
 
 //distance measurment
 long distanceMM = 0;
 
+DriveHAL drive(MOTOR_IN1_PIN, MOTOR_IN2_PIN, SERVO_PIN);
+
+void bluetoothInit();
+void uplinkUpdate();
+float measureDistanceMM();
 
 
 
@@ -66,13 +70,8 @@ long distanceMM = 0;
 void stopEverything() {
   //stop motor:
 
-  ledcWrite(MOTOR_IN1_PIN, 0);
-  ledcWrite(MOTOR_IN2_PIN, 0);
-
-  //reset steering servo:
-  // steeringServo.write(90);
- 
-  ledcWrite(SERVO_PIN, 307);
+  drive.stop();
+  drive.centerSteering();
 
   //reset params:
   x = 0;
@@ -84,42 +83,17 @@ void stopEverything() {
 void setup() {
   Serial.begin(115200);
   Serial.println("setup called");
-  pinMode(MOTOR_IN1_PIN, OUTPUT);
-  pinMode(MOTOR_IN2_PIN, OUTPUT);
-  digitalWrite(MOTOR_IN1_PIN, LOW);
-  digitalWrite(MOTOR_IN2_PIN, LOW);
-
   pinMode(US_TRIG_PIN, OUTPUT);
   pinMode(US_ECHO_PIN, INPUT);
 
-  //lcd init
-  // lcd.init();
-  // lcd.backlight();
-  // lcd.clear();
-  // lcd.setCursor(0, 0);
-  // lcd.print("Connecting...");
   pinMode(LED_PIN, OUTPUT);
-  ledcAttach(LED_PIN, 5, 8);
-  ledcWrite(LED_PIN, 128);
-  // grb.begin();
-  // grb.setBrightness(100);
-  // grb.setPixelColor(0, 252, 94, 3);
-  // grb.show();
+  ledcSetup(0, 5, 8);  // Channel 0, 5Hz, 8-bit
+  ledcAttachPin(LED_PIN, 0);
+  ledcWrite(0, 128);
 
   bluetoothInit();
 
-  // Servo setup
-  // ESP32PWM::allocateTimer(0);
-
-   ledcAttach(SERVO_PIN, 50, 12); // Pin 4, 50Hz Frequency, 12-bit Resolution
-   ledcWrite(SERVO_PIN, 307);
-  // steeringServo.setPeriodHertz(50);
-  // steeringServo.attach(SERVO_PIN, 500, 2400);
-  // steeringServo.write(90);
-
-  // Motor setup
-  ledcAttach(MOTOR_IN1_PIN, motorFreq, pwmResolution);
-  ledcAttach(MOTOR_IN2_PIN, motorFreq, pwmResolution);
+  drive.begin();
 }
 
 
@@ -136,10 +110,9 @@ void loop() {
     // smoothedAngle += diff * smoothingFactor;
     // steeringServo.write((int)smoothedAngle);
     // Serial.print("Target: "); Serial.print(targetAngle);
-    int servoPWM = map(targetAngle + x_trim, 0, 180, 102, 512);
-    ledcWrite(SERVO_PIN, servoPWM);
+    drive.setSteeringAngle(targetAngle + x_trim);
 
-    motorControll(targetSpeed);
+    drive.setSpeed(targetSpeed);
     Serial.printf("X: %d; Y: %d\n", x, y);
     
   }
@@ -192,27 +165,6 @@ class MyServerCallback : public BLEServerCallbacks {
 
 int currentSpeed = 0;
 
-void motorControll(int8_t setSpeed) {
-
-
-
-  int absSpeed = abs(setSpeed);
-  int pwmValue = map(absSpeed, 0, 100, 0, 180);
-
-  if (setSpeed > 5) {
-    ledcWrite(MOTOR_IN1_PIN, pwmValue);
-    ledcWrite(MOTOR_IN2_PIN, 0);
-  } else if (setSpeed < -5) {
-    ledcWrite(MOTOR_IN1_PIN, 0);
-    ledcWrite(MOTOR_IN2_PIN, pwmValue);
-  } else {
-    ledcWrite(MOTOR_IN1_PIN, 0);
-    ledcWrite(MOTOR_IN2_PIN, 0);
-  }
-}
-
-
-
 float measureDistanceMM(){
 
   digitalWrite(US_TRIG_PIN, LOW);
@@ -221,7 +173,7 @@ float measureDistanceMM(){
   delayMicroseconds(10);
   digitalWrite(US_TRIG_PIN, LOW);
 
-  long rawPulsT  = pulseIn(US_ECHO_PIN, HIGH, MAX_DISTANCE_TIMEOUT);
+  long rawPulsT  = pulseIn(US_ECHO_PIN, HIGH);
   Serial.print("Raw pulse t = "); Serial.println(rawPulsT);
 
   return rawPulsT * SOUND_SPEED / 2;
@@ -242,7 +194,7 @@ void bluetoothInit() {
   pDriveCharactaristic->setCallbacks(new MyCharacteristicCallback());
 
   pUplinkCharachtaristics = pService->createCharacteristic(
-    UPLINK_CHARACTARISC_UUID,
+    UPLINK_CHARACTARISTIC_UUID,
     BLECharacteristic::PROPERTY_NOTIFY);
   pUplinkCharachtaristics->addDescriptor(new BLE2902());
 
