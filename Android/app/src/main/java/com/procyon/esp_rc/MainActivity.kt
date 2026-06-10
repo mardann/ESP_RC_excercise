@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -95,6 +97,7 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
             joystick,
             readout,
             scanButton,
+            disconnectButton,
             xTrimSlider) = createRefs()
 
         Text(
@@ -158,6 +161,15 @@ fun Content(modifier: Modifier = Modifier, vm: MainViewModelInter) {
             enabled = (connectionStatus == ConnectionsState.Disconnected || connectionStatus == ConnectionsState.Error) && hasBtPermission
         ) {
             Text("Connect", style = MaterialTheme.typography.bodyLarge)
+        }
+        
+        Button(modifier = Modifier.constrainAs(disconnectButton){
+            bottom.linkTo(parent.bottom, margin = 16.dp)
+            start.linkTo(parent.start, margin = 16.dp)
+        }, onClick = vm::disconnect,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f), disabledContainerColor = Color.Red.copy(alpha = 0.3f)),
+            enabled = connectionStatus != ConnectionsState.Disconnected) {
+            Text("Disconnect",  style = MaterialTheme.typography.bodyLarge, color = Color.White)
         }
     }
 

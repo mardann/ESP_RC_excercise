@@ -25,7 +25,10 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
@@ -35,7 +38,10 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(FlowPreview::class)
 class BleManager(private val context: Context, val status: (ConnectionsState) -> Unit, val telemetry:( Telemetry) -> Unit) {
 
-    data class Telemetry(val distanceMm: Int = 0);
+    companion object{
+        const val TRIM_NA = 128
+    }
+    data class Telemetry(val distanceMm: Int = 0, val carXTrim: Int = TRIM_NA);
     var localTelemetry = Telemetry()
 
     private val TAG = this::class.simpleName
@@ -44,22 +50,17 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     }
 
-    private val posFlow = MutableSharedFlow<Triple<Int, Int, Int>>(extraBufferCapacity = 1)
+    private val posFlow = MutableStateFlow<Triple<Int, Int, Int>>(Triple(0,0, TRIM_NA))
 
     private val scope = CoroutineScope(Dispatchers.IO)
     private val timeoutScope = CoroutineScope(Dispatchers.Default)
     var timeoutJob : Job? = null
     var reconnectJob :  Job? = null
+    var watchdogJob: Job? = null
+    var heartbeatJob: Job? = null
+    var lastActivityMillis: Long = 0
 
-    init {
-        scope.launch {
-            posFlow
-                .sample(100.milliseconds)
-                .collect {
-                    performWrite(it)
-                }
-        }
-    }
+
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startScan() {
@@ -110,9 +111,13 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
                     BluetoothProfile.STATE_CONNECTED -> {
                         gatt?.discoverServices()
                         reconnectJob?.cancel()
+                        lastActivityMillis = System.currentTimeMillis()
                     }
 
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        watchdogJob?.cancel()
+                        heartbeatJob?.cancel()
+                        lastActivityMillis = 0
                         attemptReconnect()
 
                     }
@@ -133,29 +138,71 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
                         descriptor,
                         BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
 
+                    // reset activity timestamp and start watchdog + heartbeat
+                    lastActivityMillis = System.currentTimeMillis()
+                    watchdogJob?.cancel()
+                    watchdogJob = scope.launch {
+                        while (true) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastActivityMillis > 500) {
+                                // considered lost — force reconnect
+                                attemptReconnect()
+                                break
+                            }
+                            delay(100)
+                        }
+                    }
+
+                    heartbeatJob?.cancel()
+                    heartbeatJob = scope.launch {
+                        while (true){
+                            performWrite(posFlow.value)
+                            delay(100)
+                        }
+                    }
+
                 }
+            }
+
+            override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
+                // successful write ack from server
+                lastActivityMillis = System.currentTimeMillis()
             }
 
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
                 Log.d(TAG, "onCharacteristicChanged: charactaristic uuid = ${characteristic.uuid}, values = $value")
                 if(characteristic.uuid == UPLINK_CHARACTARISTIC_UUID){
                     val distanceMm = ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
+                    val car_x_trim = ((value[2].toInt()) and 0xFF) - 128
+                    Log.d(TAG, "onCharacteristicChanged:  x_trim uplinked from car = $car_x_trim")
 //                    val centiVolt = ((value[2].toInt() and 0xFF) shl 8) or (value[2].toInt() and 0xFF)
 //                    val percent = value[4].toInt() and 0xFF
 
-                    localTelemetry = localTelemetry.copy(distanceMm)
+                    localTelemetry = localTelemetry.copy(distanceMm, car_x_trim)
 
                     telemetry(localTelemetry)
+                    lastActivityMillis = System.currentTimeMillis()
                 }
             }
 
         })
     }
 
+    fun disconnect(){
+        status(ConnectionsState.Disconnected)
+        watchdogJob?.cancel()
+        heartbeatJob?.cancel()
+        bluetoothGatt?.disconnect()
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+    }
+
     private val reconnectDuration = 60_000L
 
     fun attemptReconnect(){
         status(ConnectionsState.Reconnecting)
+        watchdogJob?.cancel()
+        heartbeatJob?.cancel()
         bluetoothGatt?.close()
         bluetoothGatt = null
 
@@ -177,7 +224,9 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
     }
 
     fun sendJoystickData(pos: Triple<Int, Int, Int>) {
-        posFlow.tryEmit(pos)
+        posFlow.update{
+            pos
+        }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -188,12 +237,14 @@ class BleManager(private val context: Context, val status: (ConnectionsState) ->
 
         if (characteristic != null) {
             val payload = byteArrayOf(x.toByte(), y.toByte(), xTrim.toByte())
-            Log.d(TAG, "performWrite: payload = $payload")
+            Log.d(TAG, "performWrite: payload = ${payload.toString()}")
+            // use default write to receive an acknowledgement from the server
             bluetoothGatt?.writeCharacteristic(
                 characteristic,
                 payload,
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             )
+            lastActivityMillis = System.currentTimeMillis()
         }
     }
 

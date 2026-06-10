@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application), MainViewModelInter {
 
-
+    val TAG = this::class.simpleName
     private val _joyStickPos = MutableStateFlow(Pair(0, 0))
     override val joyStickPos: StateFlow<Pair<Int, Int>> = _joyStickPos
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
@@ -24,16 +24,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     override val telemetryState: StateFlow<BleManager.Telemetry> = _telemetry
 
 
-    override val xTrim: StateFlow<Int> = MutableStateFlow(0)
+    override val xTrim: StateFlow<Int> = MutableStateFlow(BleManager.TRIM_NA)
 
     private val bleManager = BleManager(application, { state ->
         _connectionState.update { state }
-    },{telemetry -> _telemetry.tryEmit(telemetry)})
+    }, { telemetry ->
+        _telemetry.tryEmit(telemetry)
+        if (xTrim.value != telemetry.carXTrim) {
+            Log.d(TAG, "x_trim updated from car: ${telemetry.carXTrim}")
+            (xTrim as MutableStateFlow).tryEmit(telemetry.carXTrim)
+        }
+    })
 
     override fun updateXTrim(trim: Int) {
-        (xTrim as MutableStateFlow).tryEmit(trim)
-
         val data = Triple(joyStickPos.value.first, joyStickPos.value.second, trim)
+        Log.d(TAG, "update x_trim: $trim")
         updateBle(data)
     }
 
@@ -55,6 +60,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
         bleManager.startScan()
     }
 
+    override fun disconnect() {
+        bleManager.disconnect()
+    }
+
 }
 
 class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
@@ -67,8 +76,7 @@ class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
 
     private val _connectionState = MutableStateFlow(ConnectionsState.Disconnected)
     override val connectionState: StateFlow<ConnectionsState> = _connectionState
-    override val telemetryState: StateFlow<BleManager.Telemetry>
-        = MutableStateFlow(BleManager.Telemetry())
+    override val telemetryState: StateFlow<BleManager.Telemetry> = MutableStateFlow(BleManager.Telemetry())
 
     override fun updateJoystickPos(x: Int, y: Int) {
         _joyStickPos.update { Pair(x, y) }
@@ -91,6 +99,10 @@ class MockViewModel(private val scope: CoroutineScope) : MainViewModelInter {
 
         }
     }
+
+    override fun disconnect() {
+
+    }
 }
 
 interface MainViewModelInter {
@@ -99,10 +111,10 @@ interface MainViewModelInter {
     val connectionState: StateFlow<ConnectionsState>
     val telemetryState: StateFlow<BleManager.Telemetry>
 
-    val xTrim : StateFlow<Int>
-
+    val xTrim: StateFlow<Int>
     fun updateXTrim(trim: Int)
 
     fun startScan()
+    fun disconnect()
 
 }

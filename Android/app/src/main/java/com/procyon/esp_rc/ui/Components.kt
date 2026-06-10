@@ -239,14 +239,14 @@ fun XTrim(modifier: Modifier = Modifier, trimIncrement : Int = 1, trim: Int, upd
                 end = Offset(size.width, center.y),
                 strokeWidth = progressBarWidth)
 
-
-
-
-            val xPos = center.x + ((trim.coerceIn(-100..100) * (center.x / 2)) / (center.x / 2))
+            val xPos = if(trim != 128){center.x + ((trim.coerceIn(-100..100) * (center.x / 2)) / (center.x / 2))}
+            else {center.x}
             val centerOffset = Offset(xPos, center.y)
 
-            val textMeasureResult = textMeasures.measure(text = "$trim",
-                style = TextStyle.Default.copy(color = Color.Black, fontSize = 22.sp))
+            val text = if(trim != 128) "$trim" else "N/A"
+
+            val textMeasureResult = textMeasures.measure(text = text,
+                style = TextStyle.Default.copy(color = Color.Black, fontSize = 20.sp))
             val textSize = textMeasureResult.size
 
             drawCircle(Color.White,
